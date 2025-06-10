@@ -1,0 +1,195 @@
+from flask import Flask, request
+import random
+
+app = Flask(__name__)
+
+# Destination data
+destinations = {
+    "beach": ["Maldives", "Bali", "Goa", "Phuket"],
+    "adventure": ["Nepal", "Peru", "Switzerland", "New Zealand"],
+    "culture": ["Rome", "Kyoto", "Istanbul", "Marrakech"],
+    "wildlife": ["Kenya", "Costa Rica", "Borneo", "South Africa"]
+}
+
+# Reverse lookup for destination -> type
+destination_to_type = {place: dtype for dtype, places in destinations.items() for place in places}
+
+# Packing list for each type
+packing_list = {
+    "beach": ["Swimwear", "Sunscreen", "Sunglasses", "Flip-flops"],
+    "adventure": ["Hiking boots", "Backpack", "First aid kit", "Water bottle"],
+    "culture": ["Camera", "Guidebook", "Comfortable shoes", "Modest clothing"],
+    "wildlife": ["Binoculars", "Safari hat", "Insect repellent", "Camera"]
+}
+
+# Activities for each type
+activities = {
+    "beach": ["Relax on the beach", "Try water sports", "Go snorkeling", "Watch sunset", "Explore beach market"],
+    "adventure": ["Go hiking", "Try zip-lining", "Camp under the stars", "Climb a peak", "River rafting"],
+    "culture": ["Visit museums", "Explore temples", "Attend a local event", "Try traditional food", "Take a walking tour"],
+    "wildlife": ["Go on a safari", "Visit a wildlife reserve", "Bird watching", "Night jungle walk", "Meet local tribes"]
+}
+
+valid_types = list(destinations.keys())
+all_places = [place for sublist in destinations.values() for place in sublist]
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    message = ""
+    items_html = ""
+    itinerary_html = ""
+
+    if request.method == "POST":
+        action = request.form.get("action")
+        selected_place = request.form.get("selected_place", "").strip()
+        travel_type = destination_to_type.get(selected_place.lower().capitalize(), "")
+
+        # Fallback if no place selected, use travel_type
+        if not travel_type:
+            travel_type = request.form.get("travel_type", "").lower().strip()
+
+        if travel_type not in valid_types:
+            message = "❗ Please select a valid travel type or place."
+
+        elif action == "destination":
+            suggestion = selected_place if selected_place else random.choice(destinations[travel_type])
+            message = f"🌟 You might enjoy visiting <b>{suggestion}</b>!"
+
+            try:
+                days = int(request.form.get("days", "0"))
+                if days > 0:
+                    selected_activities = random.choices(activities[travel_type], k=days)
+                    itinerary_html = "<h4>🗓 Suggested Itinerary:</h4><ul>"
+                    for i, act in enumerate(selected_activities):
+                        itinerary_html += f"<li>Day {i+1}: {act}</li>"
+                    itinerary_html += "</ul>"
+            except ValueError:
+                itinerary_html = "<p>🔸 Enter a valid number of days for an itinerary.</p>"
+
+        elif action == "packing":
+            message = "🧳 Here's your basic packing list:"
+            items_html = "<ul>" + "".join(f"<li>{item}</li>" for item in packing_list[travel_type]) + "</ul>"
+
+        elif action == "activities":
+            message = f"🎯 Fun activities for a {travel_type.title()} trip:"
+            try:
+                days = int(request.form.get("days", "0"))
+                if days > 0:
+                    selected_activities = random.choices(activities[travel_type], k=days)
+                    items_html = "<ul>" + "".join(f"<li>Day {i+1}: {act}</li>" for i, act in enumerate(selected_activities)) + "</ul>"
+                else:
+                    items_html = "<ul>" + "".join(f"<li>{act}</li>" for act in activities[travel_type]) + "</ul>"
+            except ValueError:
+                items_html = "<ul>" + "".join(f"<li>{act}</li>" for act in activities[travel_type]) + "</ul>"
+
+        elif action == "budget":
+            try:
+                days = int(request.form.get("days", "0"))
+                budget = int(request.form.get("budget", "0"))
+                if days <= 0 or budget <= 0:
+                    message = "❗ Days and budget must be positive numbers."
+                else:
+                    total = days * budget
+                    message = f"💰 Your estimated total budget is around <b>${total}</b>."
+            except ValueError:
+                message = "❗ Please enter valid numbers for days and budget."
+
+        else:
+            message = "❗ Invalid action selected."
+
+    place_options = "".join(f"<option value='{place}'>{place}</option>" for place in all_places)
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Travel Assistant Bot 🧭</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background-color: #f0f8ff;
+                padding: 30px;
+            }}
+            h1 {{
+                color: #0077cc;
+            }}
+            form {{
+                background-color: #ffffff;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0px 0px 8px rgba(0, 0, 0, 0.1);
+                max-width: 500px;
+                margin-top: 20px;
+            }}
+            label {{
+                display: block;
+                margin-top: 15px;
+            }}
+            input, select {{
+                padding: 8px;
+                width: 100%;
+                box-sizing: border-box;
+                margin-top: 5px;
+            }}
+            button {{
+                margin-top: 20px;
+                padding: 10px 20px;
+                background-color: #0077cc;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+            }}
+            h3 {{
+                margin-top: 30px;
+                color: green;
+            }}
+        </style>
+    </head>
+    <body>
+        <h1>🌍 Travel Assistant Bot 🧭</h1>
+        <p>I can help with destinations, packing, activities, itineraries & budget planning!</p>
+
+        <form method="POST">
+            <label for="action">What do you want help with?</label>
+            <select name="action" id="action" required>
+                <option value="destination">Suggest Destination + Itinerary</option>
+                <option value="packing">Show Packing List</option>
+                <option value="activities">List Activities</option>
+                <option value="budget">Estimate Budget</option>
+            </select>
+
+            <label for="selected_place">Or Select Specific Place (optional):</label>
+            <select name="selected_place" id="selected_place">
+                <option value="">--None--</option>
+                {place_options}
+            </select>
+
+            <label for="travel_type">Or Select Travel Type:</label>
+            <select name="travel_type" id="travel_type">
+                <option value="">--Select--</option>
+                <option value="beach">Beach</option>
+                <option value="adventure">Adventure</option>
+                <option value="culture">Culture</option>
+                <option value="wildlife">Wildlife</option>
+            </select>
+
+            <label for="days">Number of Days (for itinerary or budget):</label>
+            <input type="number" name="days" id="days" min="1">
+
+            <label for="budget">Daily Budget (USD):</label>
+            <input type="number" name="budget" id="budget" min="1">
+
+            <button type="submit">Submit</button>
+        </form>
+
+        {"<h3>" + message + "</h3>" if message else ""}
+        {items_html}
+        {itinerary_html}
+    </body>
+    </html>
+    """
+    return html
+
+if __name__ == "__main__":
+    app.run(debug=True)
